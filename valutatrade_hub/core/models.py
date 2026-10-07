@@ -84,3 +84,51 @@ class User:
     def _hash_password(self, password: str) -> str:
         """Считает sha256-хеш от пароля с солью."""
         return hashlib.sha256((password + self._salt).encode()).hexdigest()
+
+class Wallet:
+    """Кошелёк пользователя для одной валюты."""
+
+    def __init__(self, currency_code: str, balance: float = 0.0) -> None:
+        """Создаёт кошелёк с указанной валютой и балансом."""
+        self.currency_code = currency_code
+        self._balance = balance
+
+    @property
+    def balance(self) -> float:
+        """Возвращает текущий баланс."""
+        return self._balance
+
+    @balance.setter
+    def balance(self, value: float) -> None:
+        """ Делает баланс, запрещая отрицательные и нечисловые значения."""
+        if not isinstance(value, (int, float)):
+            raise TypeError("Баланс должен быть числом")
+        if value < 0:
+            raise ValueError("Баланс не может быть отрицательным")
+        self._balance = value
+
+    def deposit(self, amount: float) -> None:
+        """Пополняет баланс на указанную сумму."""
+        if not isinstance(amount, (int, float)):
+            raise TypeError("Сумма должна быть числом")
+        if amount <= 0:
+            raise ValueError("Сумма пополнения должна быть положительной")
+        self.balance = self._balance + amount
+
+    def withdraw(self, amount: float) -> None:
+        """Снимает указанную сумму, если баланс позволяет."""
+        if not isinstance(amount, (int, float)):
+            raise TypeError("Сумма должна быть числом")
+        if amount <= 0:
+            raise ValueError("Сумма снятия должна быть положительной")
+        if amount > self._balance:
+            raise ValueError(
+                f"Недостаточно средств: доступно {self._balance}, "
+                f"требуется {amount}"
+            )
+        self.balance = self._balance - amount
+
+    def get_balance_info(self) -> str:
+        """Возвращает строку с информацией о балансе."""
+        return f"{self.currency_code}: {self._balance}"
+
