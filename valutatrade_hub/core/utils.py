@@ -1,52 +1,55 @@
 """Утилиты для работы с JSON-файлами."""
 
 import json
-from pathlib import Path
 
-DATA_DIR = Path("data")
-USERS_FILE = DATA_DIR / "users.json"
-PORTFOLIOS_FILE = DATA_DIR / "portfolios.json"
+from valutatrade_hub.infra.settings import SettingsLoader
 
 
 class DataStorage:
     """Работа с JSON-хранилищем."""
 
     @staticmethod
-    def save_users(users, filepath=USERS_FILE):
+    def save_users(users):
         """Сохраняет список пользователей."""
-        filepath.parent.mkdir(parents=True, exist_ok=True)
+        settings = SettingsLoader()
+        path = settings.get("USERS_FILE")
+        path.parent.mkdir(parents=True, exist_ok=True)
         data = [user.to_dict() for user in users]
-        filepath.write_text(
+        path.write_text(
             json.dumps(data, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
 
     @staticmethod
-    def load_users(filepath=USERS_FILE):
+    def load_users():
         """Загружает список пользователей."""
         from valutatrade_hub.core.models import User
 
-        if not filepath.exists():
+        path = SettingsLoader().get("USERS_FILE")
+        if not path.exists():
             return []
-        data = json.loads(filepath.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"))
         return [User.from_dict(item) for item in data]
 
     @staticmethod
-    def save_portfolios(portfolios, filepath=PORTFOLIOS_FILE):
+    def save_portfolios(portfolios):
         """Сохраняет список портфелей."""
-        filepath.parent.mkdir(parents=True, exist_ok=True)
+        settings = SettingsLoader()
+        path = settings.get("PORTFOLIOS_FILE")
+        path.parent.mkdir(parents=True, exist_ok=True)
         data = [portfolio.to_dict() for portfolio in portfolios]
-        filepath.write_text(
+        path.write_text(
             json.dumps(data, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
 
     @staticmethod
-    def load_portfolios(filepath=PORTFOLIOS_FILE):
+    def load_portfolios():
         """Загружает список портфелей."""
         from valutatrade_hub.core.models import Portfolio
 
-        if not filepath.exists():
+        path = SettingsLoader().get("PORTFOLIOS_FILE")
+        if not path.exists():
             return []
-        data = json.loads(filepath.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"))
         return [Portfolio.from_dict(item) for item in data]

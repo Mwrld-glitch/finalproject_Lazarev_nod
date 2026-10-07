@@ -1,19 +1,10 @@
 """Модели данных системы ValutaTrade Hub."""
 
 import hashlib
-import secrets
 from datetime import datetime
 from typing import Dict, Optional
 
 from valutatrade_hub.core.exceptions import InsufficientFundsError
-
-EXCHANGE_RATES = {
-    "USD": 1.0,
-    "EUR": 1.10,
-    "BTC": 65000.0,
-    "RUB": 0.011,
-    "ETH": 3500.0,
-}
 
 
 class User:
@@ -196,20 +187,23 @@ class Portfolio:
         """Возвращает объект Wallet по коду валюты."""
         return self._wallets.get(currency_code)
 
-    def get_total_value(self, base_currency: str = "USD") -> float:
-        """Возвращает общую стоимость всех валют в базовой валюте."""
-        if base_currency not in EXCHANGE_RATES:
+    def get_total_value(self, rates: dict, base_currency: str = "USD") -> float:
+        """Возвращает общую стоимость всех валют в базовой валюте.
+
+        Курсы передаются извне (например, из rates.json).
+        """
+        if base_currency not in rates:
             raise ValueError(
                 f"Курс для базовой валюты {base_currency} не задан в системе."
             )
 
         total_in_usd = 0.0
         for code, wallet in self._wallets.items():
-            if code not in EXCHANGE_RATES:
+            if code not in rates:
                 raise ValueError(f"Курс для валюты {code} не задан в системе.")
-            total_in_usd += wallet.balance * EXCHANGE_RATES[code]
+            total_in_usd += wallet.balance * rates[code]
 
-        base_rate = EXCHANGE_RATES[base_currency]
+        base_rate = rates[base_currency]
         return total_in_usd / base_rate
 
     def to_dict(self) -> dict:
@@ -217,13 +211,13 @@ class Portfolio:
         return {
             "user_id": self._user_id,
             "wallets": {
-                code: wallet.to_dict() 
+                code: wallet.to_dict()
                 for code, wallet in self._wallets.items()
             }
         }
-    
+
     @classmethod
-    def from_dict(cls, data: dict) -> 'Portfolio':
+    def from_dict(cls, data: dict) -> "Portfolio":
         """Десериализация из словаря в объект."""
         wallets = {
             code: Wallet.from_dict(wallet_data)

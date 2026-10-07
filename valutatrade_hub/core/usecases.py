@@ -1,20 +1,19 @@
 """Бизнес-логика: регистрация, вход, покупка/продажа, курсы."""
 
+import json
 import secrets
 from datetime import datetime
-from pathlib import Path
 
 from valutatrade_hub.core.exceptions import CurrencyNotFoundError
 from valutatrade_hub.core.models import Portfolio, User
 from valutatrade_hub.core.utils import DataStorage
-
-RATES_FILE = Path("data/rates.json")
+from valutatrade_hub.infra.settings import SettingsLoader
 
 
 def _rates():
     """Читает rates.json → {код: курс_к_USD}."""
-    import json
-    raw = json.loads(RATES_FILE.read_text(encoding="utf-8"))
+    path = SettingsLoader().get("RATES_FILE")
+    raw = json.loads(path.read_text(encoding="utf-8"))
     result = {"USD": 1.0}
     for key, value in raw.items():
         if isinstance(value, dict) and key.endswith("_USD"):
@@ -88,7 +87,7 @@ def show_portfolio(user, base="USD"):
     return {
         "portfolio": portfolio,
         "base": base,
-        "total": portfolio.get_total_value(base),
+        "total": portfolio.get_total_value(_rates(), base),
     }
 
 
