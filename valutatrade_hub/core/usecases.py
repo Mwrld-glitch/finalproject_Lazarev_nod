@@ -7,6 +7,7 @@ from datetime import datetime
 from valutatrade_hub.core.exceptions import CurrencyNotFoundError
 from valutatrade_hub.core.models import Portfolio, User
 from valutatrade_hub.core.utils import DataStorage
+from valutatrade_hub.decorators import log_action
 from valutatrade_hub.infra.settings import SettingsLoader
 
 
@@ -29,6 +30,7 @@ def _rate(code):
     return rates[code]
 
 
+@log_action
 def register(username, password):
     """Регистрирует нового пользователя."""
     users = DataStorage.load_users()
@@ -49,6 +51,7 @@ def register(username, password):
     return f"Пользователь '{username}' зарегистрирован (id={user_id})."
 
 
+@log_action
 def login(username, password):
     """Проверяет логин и пароль."""
     for u in DataStorage.load_users():
@@ -91,6 +94,7 @@ def show_portfolio(user, base="USD"):
     }
 
 
+@log_action
 def buy(user, currency, amount):
     """Покупка: списывает USD, зачисляет валюту."""
     currency = currency.upper()
@@ -119,6 +123,7 @@ def buy(user, currency, amount):
     }
 
 
+@log_action
 def sell(user, currency, amount):
     """Продажа: списывает валюту, зачисляет USD."""
     currency = currency.upper()
