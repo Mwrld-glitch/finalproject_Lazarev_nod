@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [project.scripts]
-valutatrade = "valutatrade_hub.cli.interface:main"
+valutatrade = "main:main_entry"
 
 [build-system]
 requires = ["hatchling"]
