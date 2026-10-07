@@ -4,7 +4,7 @@ import json
 import secrets
 from datetime import datetime
 
-from valutatrade_hub.core.exceptions import CurrencyNotFoundError
+from valutatrade_hub.core.currencies import get_currency
 from valutatrade_hub.core.models import Portfolio, User
 from valutatrade_hub.core.utils import DataStorage
 from valutatrade_hub.decorators import log_action
@@ -24,10 +24,7 @@ def _rates():
 
 def _rate(code):
     """Возвращает курс валюты к USD."""
-    rates = _rates()
-    if code not in rates:
-        raise CurrencyNotFoundError(f"Неизвестная валюта '{code}'")
-    return rates[code]
+    return _rates()[code]
 
 
 @log_action
@@ -85,7 +82,7 @@ def _save_portfolio(portfolio):
 
 def show_portfolio(user, base="USD"):
     """Возвращает портфель и итоговую стоимость."""
-    _rate(base)
+    get_currency(base)
     portfolio = _portfolio(user)
     return {
         "portfolio": portfolio,
@@ -98,6 +95,8 @@ def show_portfolio(user, base="USD"):
 def buy(user, currency, amount):
     """Покупка: списывает USD, зачисляет валюту."""
     currency = currency.upper()
+    get_currency(currency)
+
     if currency == "USD":
         raise ValueError("Нельзя купить USD за USD")
 
@@ -127,6 +126,8 @@ def buy(user, currency, amount):
 def sell(user, currency, amount):
     """Продажа: списывает валюту, зачисляет USD."""
     currency = currency.upper()
+    get_currency(currency)
+
     if currency == "USD":
         raise ValueError("Нельзя продать USD за USD")
 
@@ -135,7 +136,7 @@ def sell(user, currency, amount):
     portfolio = _portfolio(user)
     target = portfolio.get_wallet(currency)
     if target is None:
-        raise CurrencyNotFoundError(f"У вас нет кошелька '{currency}'")
+        raise ValueError(f"У вас нет кошелька '{currency}'")
 
     before = target.balance
     target.withdraw(amount)
@@ -158,6 +159,8 @@ def get_rate(from_code, to_code):
     """Возвращает курс между двумя валютами."""
     from_code = from_code.upper()
     to_code = to_code.upper()
+    get_currency(from_code)
+    get_currency(to_code)
     return {
         "from": from_code,
         "to": to_code,
