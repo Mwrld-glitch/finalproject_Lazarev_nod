@@ -1,32 +1,20 @@
 """Бизнес-логика: регистрация, вход, покупка/продажа, курсы."""
 
-import json
+import secrets
+from datetime import datetime
 from pathlib import Path
 
 from valutatrade_hub.core.exceptions import CurrencyNotFoundError
 from valutatrade_hub.core.models import Portfolio, User
+from valutatrade_hub.core.utils import DataStorage
 
-USERS_FILE = Path("data/users.json")
-PORTFOLIOS_FILE = Path("data/portfolios.json")
 RATES_FILE = Path("data/rates.json")
-
-
-def _read(path):
-    """Читает JSON-файл."""
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def _write(path, data):
-    """Пишет JSON-файл."""
-    path.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
 
 
 def _rates():
     """Читает rates.json → {код: курс_к_USD}."""
-    raw = _read(RATES_FILE)
+    import json
+    raw = json.loads(RATES_FILE.read_text(encoding="utf-8"))
     result = {"USD": 1.0}
     for key, value in raw.items():
         if isinstance(value, dict) and key.endswith("_USD"):
@@ -42,55 +30,55 @@ def _rate(code):
     return rates[code]
 
 
-def _portfolio(user):
-    """Читает портфель пользователя."""
-    for item in _read(PORTFOLIOS_FILE):
-        if item["user_id"] == user.user_id:
-            return Portfolio.from_dict(item, user)
-    return Portfolio(user)
-
-
-def _save_portfolio(portfolio):
-    """Пишет портфель в portfolios.json."""
-    raw = _read(PORTFOLIOS_FILE)
-    data = portfolio.to_dict()
-    for i, item in enumerate(raw):
-        if item["user_id"] == portfolio.user_id:
-            raw[i] = data
-            break
-    else:
-        raw.append(data)
-    _write(PORTFOLIOS_FILE, raw)
-
-
 def register(username, password):
     """Регистрирует нового пользователя."""
-    users = [User.from_dict(u) for u in _read(USERS_FILE)]
+    users = DataStorage.load_users()
     if any(u.username == username for u in users):
         raise ValueError(f"Имя пользователя '{username}' уже занято")
 
     user_id = max((u.user_id for u in users), default=0) + 1
-    user = User(user_id, username)
+    salt = secrets.token_hex(8)
+    user = User(user_id, username, "", salt, datetime.now())
     user.change_password(password)
     users.append(user)
-    _write(USERS_FILE, [u.to_dict() for u in users])
+    DataStorage.save_users(users)
 
-    raw = _read(PORTFOLIOS_FILE)
-    raw.append({"user_id": user_id, "wallets": {}})
-    _write(PORTFOLIOS_FILE, raw)
+    portfolios = DataStorage.load_portfolios()
+    portfolios.append(Portfolio(user_id))
+    DataStorage.save_portfolios(portfolios)
 
     return f"Пользователь '{username}' зарегистрирован (id={user_id})."
 
 
 def login(username, password):
     """Проверяет логин и пароль."""
-    users = [User.from_dict(u) for u in _read(USERS_FILE)]
-    user = next((u for u in users if u.username == username), None)
-    if user is None:
-        raise ValueError(f"Пользователь '{username}' не найден")
-    if not user.verify_password(password):
-        raise ValueError("Неверный пароль")
-    return user
+    for u in DataStorage.load_users():
+        if u.username == username:
+            if not u.verify_password(password):
+                raise ValueError("Неверный пароль")
+            return u
+    raise ValueError(f"Пользователь '{username}' не найден")
+
+
+def _portfolio(user):
+    """Возвращает портфель пользователя."""
+    for p in DataStorage.load_portfolios():
+        if p.user_id == user.user_id:
+            p._user = user
+            return p
+    return Portfolio(user.user_id, user=user)
+
+
+def _save_portfolio(portfolio):
+    """Сохраняет портфель."""
+    portfolios = DataStorage.load_portfolios()
+    for i, p in enumerate(portfolios):
+        if p.user_id == portfolio.user_id:
+            portfolios[i] = portfolio
+            break
+    else:
+        portfolios.append(portfolio)
+    DataStorage.save_portfolios(portfolios)
 
 
 def show_portfolio(user, base="USD"):
@@ -100,50 +88,63 @@ def show_portfolio(user, base="USD"):
     return {
         "portfolio": portfolio,
         "base": base,
-        "total": portfolio.get_total_value(_rates(), base),
+        "total": portfolio.get_total_value(base),
     }
 
 
 def buy(user, currency, amount):
-    """Покупает валюту."""
+    """Покупка: списывает USD, зачисляет валюту."""
     currency = currency.upper()
+    if currency == "USD":
+        raise ValueError("Нельзя купить USD за USD")
+
     rate = _rate(currency)
+    cost = amount * rate
 
     portfolio = _portfolio(user)
-    wallet = portfolio.add_currency(currency)
-    before = wallet.balance
-    wallet.deposit(amount)
+    usd = portfolio.add_currency("USD")
+    usd.withdraw(cost)
+
+    target = portfolio.add_currency(currency)
+    before = target.balance
+    target.deposit(amount)
     _save_portfolio(portfolio)
 
     return {
         "currency": currency,
         "amount": amount,
         "before": before,
-        "after": wallet.balance,
+        "after": target.balance,
         "rate": rate,
-        "cost": amount * rate,
+        "cost": cost,
     }
 
 
 def sell(user, currency, amount):
-    """Продаёт валюту."""
+    """Продажа: списывает валюту, зачисляет USD."""
     currency = currency.upper()
-
-    portfolio = _portfolio(user)
-    wallet = portfolio.get_wallet(currency)
-    if wallet is None:
-        raise CurrencyNotFoundError(f"У вас нет кошелька '{currency}'")
-
-    before = wallet.balance
-    wallet.withdraw(amount)
-    _save_portfolio(portfolio)
+    if currency == "USD":
+        raise ValueError("Нельзя продать USD за USD")
 
     rate = _rate(currency)
+
+    portfolio = _portfolio(user)
+    target = portfolio.get_wallet(currency)
+    if target is None:
+        raise CurrencyNotFoundError(f"У вас нет кошелька '{currency}'")
+
+    before = target.balance
+    target.withdraw(amount)
+
+    usd = portfolio.add_currency("USD")
+    usd.deposit(amount * rate)
+    _save_portfolio(portfolio)
+
     return {
         "currency": currency,
         "amount": amount,
         "before": before,
-        "after": wallet.balance,
+        "after": target.balance,
         "rate": rate,
         "revenue": amount * rate,
     }
