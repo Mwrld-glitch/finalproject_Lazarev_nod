@@ -1,97 +1,76 @@
-import json
+"""Бизнес-логика: регистрация, вход, покупка/продажа, курсы."""
+
 import secrets
 from datetime import datetime
-from pathlib import Path
 
+from valutatrade_hub.core.exceptions import (
+    CurrencyNotFoundError,
+)
 from valutatrade_hub.core.models import Portfolio, User
-
-DATA_DIR = Path("data")
-USERS_FILE = DATA_DIR / "users.json"
-PORTFOLIOS_FILE = DATA_DIR / "portfolios.json"
-
-STUB_RATES = {
-    "USD": 1.0,
-    "EUR": 1.08,
-    "RUB": 0.010,
-    "BTC": 59337.21,
-    "ETH": 3720.00,
-    "SOL": 145.12,
-}
+from valutatrade_hub.core.utils import read, write
 
 
-def _load_json(path: Path) -> list:
-    """Читает JSON-файл, возвращает пустой список, если файла нет."""
-    if not path.exists():
-        return []
-    with path.open("r", encoding="utf-8") as f:
-        content = f.read().strip()
-        if not content:
-            return []
-        return json.loads(content)
+def _rates() -> dict:
+    """Читает rates.json и возвращает {код: курс_к_USD}."""
+    raw = read("rates.json")
+    result = {"USD": 1.0}
+    for key, value in raw.items():
+        if isinstance(value, dict) and key.endswith("_USD"):
+            result[key[:-4]] = value["rate"]
+    return result
 
 
-def _save_json(path: Path, data) -> None:
-    """Записывает данные в JSON-файл."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+def _rate(code: str) -> float:
+    """Возвращает курс валюты к USD или кидает CurrencyNotFoundError."""
+    rates = _rates()
+    if code not in rates:
+        raise CurrencyNotFoundError(f"Неизвестная валюта '{code}'")
+    return rates[code]
 
 
-def _load_users() -> list[User]:
-    """Читает users.json и возвращает список объектов User."""
-    return [User.from_dict(u) for u in _load_json(USERS_FILE)]
-
-
-def _save_users(users: list[User]) -> None:
-    """Сохраняет список объектов User в users.json."""
-    _save_json(USERS_FILE, [u.to_dict() for u in users])
-
-
-def _load_portfolio(user: User) -> Portfolio:
-    """Загружает портфель пользователя или создаёт пустой."""
-    for item in _load_json(PORTFOLIOS_FILE):
+def _portfolio(user: User) -> Portfolio:
+    """Читает портфель пользователя из portfolios.json."""
+    for item in read("portfolios.json"):
         if item["user_id"] == user.user_id:
             return Portfolio.from_dict(item, user)
     return Portfolio(user)
 
 
 def _save_portfolio(portfolio: Portfolio) -> None:
-    """Сохраняет портфель в portfolios.json (обновляет или добавляет)."""
-    raw = _load_json(PORTFOLIOS_FILE)
-    new_item = portfolio.to_dict()
+    """Сохраняет портфель в portfolios.json."""
+    raw = read("portfolios.json")
+    data = portfolio.to_dict()
     for i, item in enumerate(raw):
         if item["user_id"] == portfolio.user_id:
-            raw[i] = new_item
+            raw[i] = data
             break
     else:
-        raw.append(new_item)
-    _save_json(PORTFOLIOS_FILE, raw)
+        raw.append(data)
+    write("portfolios.json", raw)
 
 
 def register(username: str, password: str) -> str:
     """Регистрирует нового пользователя и создаёт пустой портфель."""
-    if not username or not username.strip():
-        raise ValueError("Имя пользователя не может быть пустым")
-
-    users = _load_users()
+    users = [User.from_dict(u) for u in read("users.json")]
     if any(u.username == username for u in users):
         raise ValueError(f"Имя пользователя '{username}' уже занято")
 
     user_id = max((u.user_id for u in users), default=0) + 1
-    salt = secrets.token_hex(8)
-    user = User(user_id, username, "", salt, datetime.now())
+    user = User(user_id, username, "", secrets.token_hex(8), datetime.now())
     user.change_password(password)
     users.append(user)
-    _save_users(users)
+    write("users.json", [u.to_dict() for u in users])
 
-    _save_portfolio(Portfolio(user))
+    raw = read("portfolios.json")
+    raw.append({"user_id": user_id, "wallets": {}})
+    write("portfolios.json", raw)
 
     return f"Пользователь '{username}' зарегистрирован (id={user_id})."
 
 
 def login(username: str, password: str) -> User:
-    """Находит пользователя и проверяет пароль. Возвращает объект User."""
-    users = _load_users()
+    """Проверяет логин и пароль, возвращает User."""
+    users = [User.from_dict(u) for u in read("users.json")]
     user = next((u for u in users if u.username == username), None)
     if user is None:
         raise ValueError(f"Пользователь '{username}' не найден")
@@ -101,34 +80,27 @@ def login(username: str, password: str) -> User:
 
 
 def show_portfolio(user: User, base: str = "USD") -> dict:
-    """Возвращает портфель и итоговую стоимость в базовой валюте."""
-    if base not in STUB_RATES:
-        raise ValueError(f"Неизвестная базовая валюта '{base}'")
-    portfolio = _load_portfolio(user)
+    """Показать все кошельки и итоговую стоимость в базовой валюте."""
+    _rate(base)
+    portfolio = _portfolio(user)
     return {
         "portfolio": portfolio,
         "base": base,
-        "total": portfolio.get_total_value(base),
+        "total": portfolio.get_total_value(_rates(), base),
     }
 
 
 def buy(user: User, currency: str, amount: float) -> dict:
-    """Покупает валюту: увеличивает баланс кошелька."""
+    """Покупает валюту."""
     currency = currency.upper()
-    if currency not in STUB_RATES:
-        raise ValueError(f"Неизвестная валюта '{currency}'")
-    if not isinstance(amount, (int, float)):
-        raise ValueError("'amount' должен быть числом")
-    if amount <= 0:
-        raise ValueError("'amount' должен быть положительным числом")
+    rate = _rate(currency)
 
-    portfolio = _load_portfolio(user)
+    portfolio = _portfolio(user)
     wallet = portfolio.add_currency(currency)
     before = wallet.balance
     wallet.deposit(amount)
     _save_portfolio(portfolio)
 
-    rate = STUB_RATES[currency]
     return {
         "currency": currency,
         "amount": amount,
@@ -140,23 +112,19 @@ def buy(user: User, currency: str, amount: float) -> dict:
 
 
 def sell(user: User, currency: str, amount: float) -> dict:
-    """Продаёт валюту: уменьшает баланс кошелька."""
+    """Продаёт валюту."""
     currency = currency.upper()
-    if not isinstance(amount, (int, float)):
-        raise ValueError("'amount' должен быть числом")
-    if amount <= 0:
-        raise ValueError("'amount' должен быть положительным числом")
 
-    portfolio = _load_portfolio(user)
+    portfolio = _portfolio(user)
     wallet = portfolio.get_wallet(currency)
     if wallet is None:
-        raise ValueError(f"У вас нет кошелька '{currency}'")
+        raise CurrencyNotFoundError(f"У вас нет кошелька '{currency}'")
 
     before = wallet.balance
     wallet.withdraw(amount)
     _save_portfolio(portfolio)
 
-    rate = STUB_RATES.get(currency, 0.0)
+    rate = _rate(currency)
     return {
         "currency": currency,
         "amount": amount,
@@ -168,17 +136,12 @@ def sell(user: User, currency: str, amount: float) -> dict:
 
 
 def get_rate(from_code: str, to_code: str) -> dict:
-    """Возвращает курс из одной валюты в другую (по заглушке)."""
+    """Возвращает курс между двумя валютами."""
     from_code = from_code.upper()
     to_code = to_code.upper()
-    if from_code not in STUB_RATES:
-        raise ValueError(f"Неизвестная валюта '{from_code}'")
-    if to_code not in STUB_RATES:
-        raise ValueError(f"Неизвестная валюта '{to_code}'")
-
     return {
         "from": from_code,
         "to": to_code,
-        "rate": STUB_RATES[from_code] / STUB_RATES[to_code],
-        "reverse": STUB_RATES[to_code] / STUB_RATES[from_code],
+        "rate": _rate(from_code) / _rate(to_code),
+        "reverse": _rate(to_code) / _rate(from_code),
     }
