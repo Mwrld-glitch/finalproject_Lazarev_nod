@@ -24,3 +24,6 @@ logs/
 
 # Тесты
 check.py
+
+# Данные
+data/*.json

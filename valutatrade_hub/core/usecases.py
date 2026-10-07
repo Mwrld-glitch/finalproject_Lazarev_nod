@@ -1,18 +1,32 @@
 """Бизнес-логика: регистрация, вход, покупка/продажа, курсы."""
 
-import secrets
-from datetime import datetime
+import json
+from pathlib import Path
 
-from valutatrade_hub.core.exceptions import (
-    CurrencyNotFoundError,
-)
+from valutatrade_hub.core.exceptions import CurrencyNotFoundError
 from valutatrade_hub.core.models import Portfolio, User
-from valutatrade_hub.core.utils import read, write
+
+USERS_FILE = Path("data/users.json")
+PORTFOLIOS_FILE = Path("data/portfolios.json")
+RATES_FILE = Path("data/rates.json")
 
 
-def _rates() -> dict:
-    """Читает rates.json и возвращает {код: курс_к_USD}."""
-    raw = read("rates.json")
+def _read(path):
+    """Читает JSON-файл."""
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _write(path, data):
+    """Пишет JSON-файл."""
+    path.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def _rates():
+    """Читает rates.json → {код: курс_к_USD}."""
+    raw = _read(RATES_FILE)
     result = {"USD": 1.0}
     for key, value in raw.items():
         if isinstance(value, dict) and key.endswith("_USD"):
@@ -20,25 +34,25 @@ def _rates() -> dict:
     return result
 
 
-def _rate(code: str) -> float:
-    """Возвращает курс валюты к USD или кидает CurrencyNotFoundError."""
+def _rate(code):
+    """Возвращает курс валюты к USD."""
     rates = _rates()
     if code not in rates:
         raise CurrencyNotFoundError(f"Неизвестная валюта '{code}'")
     return rates[code]
 
 
-def _portfolio(user: User) -> Portfolio:
-    """Читает портфель пользователя из portfolios.json."""
-    for item in read("portfolios.json"):
+def _portfolio(user):
+    """Читает портфель пользователя."""
+    for item in _read(PORTFOLIOS_FILE):
         if item["user_id"] == user.user_id:
             return Portfolio.from_dict(item, user)
     return Portfolio(user)
 
 
-def _save_portfolio(portfolio: Portfolio) -> None:
-    """Сохраняет портфель в portfolios.json."""
-    raw = read("portfolios.json")
+def _save_portfolio(portfolio):
+    """Пишет портфель в portfolios.json."""
+    raw = _read(PORTFOLIOS_FILE)
     data = portfolio.to_dict()
     for i, item in enumerate(raw):
         if item["user_id"] == portfolio.user_id:
@@ -46,31 +60,31 @@ def _save_portfolio(portfolio: Portfolio) -> None:
             break
     else:
         raw.append(data)
-    write("portfolios.json", raw)
+    _write(PORTFOLIOS_FILE, raw)
 
 
-def register(username: str, password: str) -> str:
-    """Регистрирует нового пользователя и создаёт пустой портфель."""
-    users = [User.from_dict(u) for u in read("users.json")]
+def register(username, password):
+    """Регистрирует нового пользователя."""
+    users = [User.from_dict(u) for u in _read(USERS_FILE)]
     if any(u.username == username for u in users):
         raise ValueError(f"Имя пользователя '{username}' уже занято")
 
     user_id = max((u.user_id for u in users), default=0) + 1
-    user = User(user_id, username, "", secrets.token_hex(8), datetime.now())
+    user = User(user_id, username)
     user.change_password(password)
     users.append(user)
-    write("users.json", [u.to_dict() for u in users])
+    _write(USERS_FILE, [u.to_dict() for u in users])
 
-    raw = read("portfolios.json")
+    raw = _read(PORTFOLIOS_FILE)
     raw.append({"user_id": user_id, "wallets": {}})
-    write("portfolios.json", raw)
+    _write(PORTFOLIOS_FILE, raw)
 
     return f"Пользователь '{username}' зарегистрирован (id={user_id})."
 
 
-def login(username: str, password: str) -> User:
-    """Проверяет логин и пароль, возвращает User."""
-    users = [User.from_dict(u) for u in read("users.json")]
+def login(username, password):
+    """Проверяет логин и пароль."""
+    users = [User.from_dict(u) for u in _read(USERS_FILE)]
     user = next((u for u in users if u.username == username), None)
     if user is None:
         raise ValueError(f"Пользователь '{username}' не найден")
@@ -79,8 +93,8 @@ def login(username: str, password: str) -> User:
     return user
 
 
-def show_portfolio(user: User, base: str = "USD") -> dict:
-    """Показать все кошельки и итоговую стоимость в базовой валюте."""
+def show_portfolio(user, base="USD"):
+    """Возвращает портфель и итоговую стоимость."""
     _rate(base)
     portfolio = _portfolio(user)
     return {
@@ -90,7 +104,7 @@ def show_portfolio(user: User, base: str = "USD") -> dict:
     }
 
 
-def buy(user: User, currency: str, amount: float) -> dict:
+def buy(user, currency, amount):
     """Покупает валюту."""
     currency = currency.upper()
     rate = _rate(currency)
@@ -111,7 +125,7 @@ def buy(user: User, currency: str, amount: float) -> dict:
     }
 
 
-def sell(user: User, currency: str, amount: float) -> dict:
+def sell(user, currency, amount):
     """Продаёт валюту."""
     currency = currency.upper()
 
@@ -135,7 +149,7 @@ def sell(user: User, currency: str, amount: float) -> dict:
     }
 
 
-def get_rate(from_code: str, to_code: str) -> dict:
+def get_rate(from_code, to_code):
     """Возвращает курс между двумя валютами."""
     from_code = from_code.upper()
     to_code = to_code.upper()
