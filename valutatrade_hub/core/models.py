@@ -1,11 +1,9 @@
 import hashlib
+from datetime import datetime
 
 
 class User:
-    """Пользователь системы.
-
-    Хранит данные пользователя, хеш пароля с солью и дату регистрации.
-    """
+    """Пользователь системы."""
 
     def __init__(
         self,
@@ -47,24 +45,12 @@ class User:
         """Возвращает дату регистрации."""
         return self._registration_date
 
-    @property
-    def password(self) -> str:
-        """Возвращает хеш пароля (для чтения)."""
-        return self._hashed_password
-
     @username.setter
     def username(self, value: str) -> None:
         """Устанавливает имя, запрещая пустое значение."""
         if not value or not value.strip():
             raise ValueError("Имя пользователя не может быть пустым")
         self._username = value
-
-    @password.setter
-    def password(self, new_password: str) -> None:
-        """Устанавливает новый пароль (не короче 4 символов)."""
-        if len(new_password) < 4:
-            raise ValueError("Пароль должен быть не короче 4 символов")
-        self._hashed_password = self._hash_password(new_password)
 
     def get_user_info(self) -> str:
         """Возвращает информацию о пользователе без пароля."""
@@ -74,17 +60,38 @@ class User:
         )
 
     def change_password(self, new_password: str) -> None:
-        """Меняет пароль пользователя с хешированием."""
-        self.password = new_password
+        """Меняет пароль с хешированием (не короче 4 символов)."""
+        if len(new_password) < 4:
+            raise ValueError("Пароль должен быть не короче 4 символов")
+        self._hashed_password = hashlib.sha256(
+            (new_password + self._salt).encode()
+        ).hexdigest()
 
     def verify_password(self, password: str) -> bool:
         """Проверяет, совпадает ли пароль с сохранённым хешем."""
-        return self._hash_password(password) == self._hashed_password
+        hashed = hashlib.sha256((password + self._salt).encode()).hexdigest()
+        return hashed == self._hashed_password
 
-    def _hash_password(self, password: str) -> str:
-        """Считает sha256-хеш от пароля с солью."""
-        return hashlib.sha256((password + self._salt).encode()).hexdigest()
+    def to_dict(self) -> dict:
+        """Превращает объект в словарь для JSON."""
+        return {
+            "user_id": self._user_id,
+            "username": self._username,
+            "hashed_password": self._hashed_password,
+            "salt": self._salt,
+            "registration_date": self._registration_date.isoformat(),
+        }
 
+    @classmethod
+    def from_dict(cls, data: dict) -> "User":
+        """Создаёт объект User из словаря."""
+        return cls(
+            data["user_id"],
+            data["username"],
+            data["hashed_password"],
+            data["salt"],
+            datetime.fromisoformat(data["registration_date"]),
+        )
 
 class Wallet:
     """Кошелёк пользователя для одной валюты."""
@@ -101,7 +108,7 @@ class Wallet:
 
     @balance.setter
     def balance(self, value: float) -> None:
-        """ Делает баланс, запрещая отрицательные и нечисловые значения."""
+        """Устанавливает баланс, запрещая отрицательные и нечисловые значения."""
         if not isinstance(value, (int, float)):
             raise TypeError("Баланс должен быть числом")
         if value < 0:
@@ -133,18 +140,35 @@ class Wallet:
         """Возвращает строку с информацией о балансе."""
         return f"{self.currency_code}: {self._balance}"
 
+    def to_dict(self) -> dict:
+        """Превращает объект в словарь для JSON."""
+        return {
+            "currency_code": self.currency_code,
+            "balance": self._balance,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Wallet":
+        """Создаёт объект Wallet из словаря."""
+        return cls(data["currency_code"], data["balance"])
+
 class Portfolio:
     """Портфель пользователя: набор кошельков по валютам."""
 
-    def __init__(self, user_id: int) -> None:
-        """Создаёт портфель для пользователя с указанным ID."""
-        self._user_id = user_id
+    def __init__(self, user) -> None:
+        """Создаёт портфель для указанного пользователя."""
+        self._user = user
         self._wallets: dict[str, Wallet] = {}
+
+    @property
+    def user(self):
+        """Возвращает объект пользователя (только для чтения)."""
+        return self._user
 
     @property
     def user_id(self) -> int:
         """Возвращает ID пользователя."""
-        return self._user_id
+        return self._user.user_id
 
     @property
     def wallets(self) -> dict[str, Wallet]:
@@ -181,3 +205,22 @@ class Portfolio:
                 continue
             total += wallet.balance * rate
         return total
+
+    def to_dict(self) -> dict:
+        """Превращает объект в словарь для JSON."""
+        return {
+            "user_id": self._user.user_id,
+            "wallets": {
+                code: {"balance": w.balance}
+                for code, w in self._wallets.items()
+            },
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict, user) -> "Portfolio":
+        """Создаёт объект Portfolio из словаря и объекта User."""
+        portfolio = cls(user)
+        for code, w in data["wallets"].items():
+            wallet = portfolio.add_currency(code)
+            wallet.balance = w["balance"]
+        return portfolio
