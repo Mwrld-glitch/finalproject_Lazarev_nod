@@ -85,6 +85,7 @@ class User:
         """Считает sha256-хеш от пароля с солью."""
         return hashlib.sha256((password + self._salt).encode()).hexdigest()
 
+
 class Wallet:
     """Кошелёк пользователя для одной валюты."""
 
@@ -132,3 +133,51 @@ class Wallet:
         """Возвращает строку с информацией о балансе."""
         return f"{self.currency_code}: {self._balance}"
 
+class Portfolio:
+    """Портфель пользователя: набор кошельков по валютам."""
+
+    def __init__(self, user_id: int) -> None:
+        """Создаёт портфель для пользователя с указанным ID."""
+        self._user_id = user_id
+        self._wallets: dict[str, Wallet] = {}
+
+    @property
+    def user_id(self) -> int:
+        """Возвращает ID пользователя."""
+        return self._user_id
+
+    @property
+    def wallets(self) -> dict[str, Wallet]:
+        """Возвращает копию словаря кошельков."""
+        return dict(self._wallets)
+
+    def add_currency(self, currency_code: str) -> Wallet:
+        """Добавляет кошелёк, если его ещё нет, и возвращает его."""
+        if currency_code not in self._wallets:
+            self._wallets[currency_code] = Wallet(currency_code)
+        return self._wallets[currency_code]
+
+    def get_wallet(self, currency_code: str) -> Wallet | None:
+        """Возвращает кошелёк по коду валюты или None."""
+        return self._wallets.get(currency_code)
+
+    def get_total_value(self, base_currency: str = "USD") -> float:
+        """Считает общую стоимость всех кошельков в базовой валюте."""
+        exchange_rates = {
+            "USD": 1.0,
+            "EUR": 1.08,
+            "RUB": 0.010,
+            "BTC": 59337.21,
+            "ETH": 3720.00,
+            "SOL": 145.12,
+        }
+        total = 0.0
+        for code, wallet in self._wallets.items():
+            if code == base_currency:
+                total += wallet.balance
+                continue
+            rate = exchange_rates.get(code)
+            if rate is None:
+                continue
+            total += wallet.balance * rate
+        return total
