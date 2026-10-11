@@ -5,9 +5,33 @@ import shlex
 from prettytable import PrettyTable
 
 from valutatrade_hub.core import usecases
-from valutatrade_hub.decorators import handle_errors
+from valutatrade_hub.core.currencies import CURRENCIES
+from valutatrade_hub.core.exceptions import (
+    ApiRequestError,
+    CurrencyNotFoundError,
+    InsufficientFundsError,
+)
 
 _CURRENT_USER = None
+
+
+def handle_errors(func):
+    """Ловит доменные ошибки и печатает пользователю."""
+
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except InsufficientFundsError as e:
+            print(f"Ошибка: {e}")
+        except CurrencyNotFoundError as e:
+            print(f"Ошибка: {e}")
+            print(f"Доступные валюты: {', '.join(CURRENCIES.keys())}")
+        except ApiRequestError as e:
+            print(f"Ошибка API: {e}. Повторите позже.")
+        except Exception as e:
+            print(f"Ошибка: {e}")
+
+    return wrapper
 
 
 def _args(parts: list[str]) -> dict:

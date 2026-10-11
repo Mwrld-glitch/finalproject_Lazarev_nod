@@ -4,8 +4,10 @@ import hashlib
 from datetime import datetime
 from typing import Dict, Optional
 
-from valutatrade_hub.core.exceptions import InsufficientFundsError
-
+from valutatrade_hub.core.exceptions import (
+    CurrencyNotFoundError,
+    InsufficientFundsError,
+)
 
 class User:
     """Класс пользователя системы."""
@@ -102,6 +104,23 @@ class Wallet:
         self.balance = balance
 
     @property
+    def currency_code(self) -> str:
+        return self._currency_code
+
+    @currency_code.setter
+    def currency_code(self, value: str):
+        if not isinstance(value, str):
+            raise TypeError("Код валюты должен быть строкой.")
+        code = value.strip().upper()
+        if not code:
+            raise ValueError("Код валюты не может быть пустым.")
+        if not (2 <= len(code) <= 5):
+            raise ValueError("Код валюты должен быть 2–5 символов.")
+        if " " in code:
+            raise ValueError("Код валюты не должен содержать пробелов.")
+        self._currency_code = code
+
+    @property
     def balance(self) -> float:
         return self._balance
 
@@ -138,17 +157,16 @@ class Wallet:
         """Сериализация кошелька в словарь."""
         return {
             "currency_code": self.currency_code,
-            "balance": self._balance
+            "balance": self._balance,
         }
-    
+
     @classmethod
-    def from_dict(cls, data: dict) -> 'Wallet':
+    def from_dict(cls, data: dict) -> "Wallet":
         """Десериализация из словаря в объект."""
         return cls(
             currency_code=data["currency_code"],
-            balance=data["balance"]
+            balance=data["balance"],
         )
-
 
 class Portfolio:
     """Класс управления всеми кошельками одного пользователя."""
@@ -187,24 +205,28 @@ class Portfolio:
         """Возвращает объект Wallet по коду валюты."""
         return self._wallets.get(currency_code)
 
-    def get_total_value(self, rates: dict, base_currency: str = "USD") -> float:
-        """Возвращает общую стоимость всех валют в базовой валюте.
+    def get_total_value(
+        self,
+        base_currency: str = "USD",
+        rates: Optional[Dict[str, float]] = None,
+    ) -> float:
+        """Возвращает общую стоимость всех валют в базовой валюте. """
+        if rates is None:
+            from valutatrade_hub.core.utils import EXCHANGE_RATES
+            rates = EXCHANGE_RATES
 
-        Курсы передаются извне (например, из rates.json).
-        """
         if base_currency not in rates:
-            raise ValueError(
-                f"Курс для базовой валюты {base_currency} не задан в системе."
+            raise CurrencyNotFoundError(
+                f"Неизвестная валюта '{base_currency}'"
             )
 
-        total_in_usd = 0.0
+        base_rate = rates[base_currency]
+        total = 0.0
         for code, wallet in self._wallets.items():
             if code not in rates:
-                raise ValueError(f"Курс для валюты {code} не задан в системе.")
-            total_in_usd += wallet.balance * rates[code]
-
-        base_rate = rates[base_currency]
-        return total_in_usd / base_rate
+                raise CurrencyNotFoundError(f"Неизвестная валюта '{code}'")
+            total += wallet.balance * rates[code] / base_rate
+        return total
 
     def to_dict(self) -> dict:
         """Сериализация портфеля в словарь."""

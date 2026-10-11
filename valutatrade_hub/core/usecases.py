@@ -5,9 +5,10 @@ import secrets
 from datetime import datetime
 
 from valutatrade_hub.core.currencies import get_currency
+from valutatrade_hub.core.exceptions import InsufficientFundsError
 from valutatrade_hub.core.models import Portfolio, User
-from valutatrade_hub.core.utils import DataStorage
 from valutatrade_hub.decorators import log_action
+from valutatrade_hub.infra.database import DatabaseManager
 from valutatrade_hub.infra.settings import SettingsLoader
 
 
@@ -30,7 +31,8 @@ def _rate(code):
 @log_action
 def register(username, password):
     """Регистрирует нового пользователя."""
-    users = DataStorage.load_users()
+    db = DatabaseManager()
+    users = db.load_users()
     if any(u.username == username for u in users):
         raise ValueError(f"Имя пользователя '{username}' уже занято")
 
@@ -39,11 +41,11 @@ def register(username, password):
     user = User(user_id, username, "", salt, datetime.now())
     user.change_password(password)
     users.append(user)
-    DataStorage.save_users(users)
+    db.save_users(users)
 
-    portfolios = DataStorage.load_portfolios()
+    portfolios = db.load_portfolios()
     portfolios.append(Portfolio(user_id))
-    DataStorage.save_portfolios(portfolios)
+    db.save_portfolios(portfolios)
 
     return f"Пользователь '{username}' зарегистрирован (id={user_id})."
 
@@ -51,7 +53,7 @@ def register(username, password):
 @log_action
 def login(username, password):
     """Проверяет логин и пароль."""
-    for u in DataStorage.load_users():
+    for u in DatabaseManager().load_users():
         if u.username == username:
             if not u.verify_password(password):
                 raise ValueError("Неверный пароль")
@@ -61,23 +63,27 @@ def login(username, password):
 
 def _portfolio(user):
     """Возвращает портфель пользователя."""
-    for p in DataStorage.load_portfolios():
+    for p in DatabaseManager().load_portfolios():
         if p.user_id == user.user_id:
-            p._user = user
-            return p
+            return Portfolio(
+                user_id=p.user_id,
+                wallets=p.wallets,
+                user=user,
+            )
     return Portfolio(user.user_id, user=user)
 
 
 def _save_portfolio(portfolio):
     """Сохраняет портфель."""
-    portfolios = DataStorage.load_portfolios()
+    db = DatabaseManager()
+    portfolios = db.load_portfolios()
     for i, p in enumerate(portfolios):
         if p.user_id == portfolio.user_id:
             portfolios[i] = portfolio
             break
     else:
         portfolios.append(portfolio)
-    DataStorage.save_portfolios(portfolios)
+    db.save_portfolios(portfolios)
 
 
 def show_portfolio(user, base="USD"):
@@ -87,13 +93,13 @@ def show_portfolio(user, base="USD"):
     return {
         "portfolio": portfolio,
         "base": base,
-        "total": portfolio.get_total_value(_rates(), base),
+        "total": portfolio.get_total_value(base, _rates()),
     }
 
 
 @log_action
 def buy(user, currency, amount):
-    """Покупка: списывает USD, зачисляет валюту."""
+    """Покупка: зачисляет валюту, считает оценочную стоимость в USD."""
     currency = currency.upper()
     get_currency(currency)
 
@@ -104,9 +110,6 @@ def buy(user, currency, amount):
     cost = amount * rate
 
     portfolio = _portfolio(user)
-    usd = portfolio.add_currency("USD")
-    usd.withdraw(cost)
-
     target = portfolio.add_currency(currency)
     before = target.balance
     target.deposit(amount)
@@ -124,7 +127,7 @@ def buy(user, currency, amount):
 
 @log_action
 def sell(user, currency, amount):
-    """Продажа: списывает валюту, зачисляет USD."""
+    """Продажа: списывает валюту, считает оценочную выручку в USD."""
     currency = currency.upper()
     get_currency(currency)
 
@@ -136,13 +139,13 @@ def sell(user, currency, amount):
     portfolio = _portfolio(user)
     target = portfolio.get_wallet(currency)
     if target is None:
-        raise ValueError(f"У вас нет кошелька '{currency}'")
+        raise InsufficientFundsError(
+            f"У вас нет кошелька '{currency}'. "
+            f"Добавьте валюту: она создаётся автоматически при первой покупке."
+        )
 
     before = target.balance
     target.withdraw(amount)
-
-    usd = portfolio.add_currency("USD")
-    usd.deposit(amount * rate)
     _save_portfolio(portfolio)
 
     return {

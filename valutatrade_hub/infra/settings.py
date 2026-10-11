@@ -5,11 +5,7 @@ from typing import Any
 
 
 class SettingsLoader:
-    """Singleton с настройками проекта.
-
-    Реализован через __new__ — простой и читаемый способ,
-    исключающий создание нескольких экземпляров.
-    """
+    """Singleton с настройками проекта. """
 
     _instance = None
 
@@ -26,7 +22,8 @@ class SettingsLoader:
             "USERS_FILE": Path("data/users.json"),
             "PORTFOLIOS_FILE": Path("data/portfolios.json"),
             "RATES_FILE": Path("data/rates.json"),
-            "RATES_TTL_SECONDS": 300,      # 5 минут
+            "HISTORY_FILE": Path("data/exchange_rates.json"),
+            "RATES_TTL_SECONDS": 300,
             "DEFAULT_BASE": "USD",
             "LOG_FILE": Path("logs/actions.log"),
             "LOG_FORMAT": "%(asctime)s %(levelname)s %(message)s",
