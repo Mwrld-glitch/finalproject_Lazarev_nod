@@ -17,7 +17,7 @@ def _rates():
     path = SettingsLoader().get("RATES_FILE")
     raw = json.loads(path.read_text(encoding="utf-8"))
     result = {"USD": 1.0}
-    for key, value in raw.items():
+    for key, value in raw.get("pairs", {}).items():
         if isinstance(value, dict) and key.endswith("_USD"):
             result[key[:-4]] = value["rate"]
     return result
@@ -170,3 +170,23 @@ def get_rate(from_code, to_code):
         "rate": _rate(from_code) / _rate(to_code),
         "reverse": _rate(to_code) / _rate(from_code),
     }
+
+def show_rates(currency=None, top=None):
+    """Возвращает курсы из rates.json с фильтрацией."""
+    rates = _rates()
+    pairs = {f"{code}_USD": rate for code, rate in rates.items() if code != "USD"}
+
+    if currency:
+        currency = currency.upper()
+        if currency == "USD":
+            return {"pairs": {"USD_USD": 1.0}, "filtered": True}
+        key = f"{currency}_USD"
+        if key not in pairs:
+            return {"pairs": {}, "filtered": True, "currency": currency}
+        return {"pairs": {key: pairs[key]}, "filtered": True}
+
+    if top:
+        sorted_pairs = sorted(pairs.items(), key=lambda x: x[1], reverse=True)
+        return {"pairs": dict(sorted_pairs[:top]), "filtered": False}
+
+    return {"pairs": pairs, "filtered": False}

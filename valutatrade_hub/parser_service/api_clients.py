@@ -78,5 +78,6 @@ class ExchangeRateApiClient(BaseApiClient):
             rate = rates.get(code)
             if rate is None:
                 raise ApiRequestError(f"ExchangeRate-API: нет курса для {code}")
-            result[f"{code}_{self.config.BASE_CURRENCY}"] = float(rate)
+            # API отдаёт «сколько X за 1 USD», переворачиваем в «USD за 1 X»
+            result[f"{code}_{self.config.BASE_CURRENCY}"] = 1.0 / float(rate)
         return result

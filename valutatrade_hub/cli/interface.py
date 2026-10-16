@@ -11,6 +11,7 @@ from valutatrade_hub.core.exceptions import (
     CurrencyNotFoundError,
     InsufficientFundsError,
 )
+from valutatrade_hub.parser_service.updater import RatesUpdater
 
 _CURRENT_USER = None
 
@@ -97,8 +98,27 @@ def _run(line: str) -> None:
             r = usecases.get_rate(a["from"], a["to"])
             _table(["Из", "В", "Курс"],
                    [[r["from"], r["to"], r["rate"]],
-                     [r["to"], r["from"], r["reverse"]]])
+                    [r["to"], r["from"], r["reverse"]]])
 
+        case "update-rates":
+            source = a.get("source")
+            result = RatesUpdater().run_update(source=source)
+            _table(
+                ["Источник", "Пар обновлено"],
+                [[source or "all", len(result)]],
+            )
+
+        case "show-rates":
+            currency = a.get("currency")
+            top = int(a["top"]) if "top" in a else None
+            data = usecases.show_rates(currency=currency, top=top)
+            pairs = data["pairs"]
+            if not pairs:
+                _table(["Сообщение"], [[f"Курс для '{currency}' не найден в кеше."]])
+            else:
+                rows = [[pair, f"{rate:.8f}"] for pair, rate in pairs.items()]
+                _table(["Пара", "Курс"], rows)
+                
         case _:
             _table(["Сообщение"], [[f"Неизвестная команда: {cmd}"]])
 

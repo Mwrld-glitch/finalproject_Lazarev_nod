@@ -24,6 +24,7 @@ logs/
 
 # Тесты
 check.py
+check_parser.py
 
 # Данные
 data/*.json
