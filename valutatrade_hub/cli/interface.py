@@ -28,8 +28,8 @@ def handle_errors(func):
             print(f"Ошибка: {e}")
             print(f"Доступные валюты: {', '.join(CURRENCIES.keys())}")
         except ApiRequestError as e:
-            print(f"Ошибка API: {e}. Повторите позже.")
-        except Exception as e:
+            print(f"Ошибка API: {e}")
+        except ValueError as e:
             print(f"Ошибка: {e}")
 
     return wrapper
@@ -37,7 +37,15 @@ def handle_errors(func):
 
 def _args(parts: list[str]) -> dict:
     """Разбирает --key value в словарь."""
-    return {parts[i][2:]: parts[i + 1] for i in range(1, len(parts), 2)}
+    result = {}
+    i = 1
+    while i < len(parts):
+        if parts[i].startswith("--") and i + 1 < len(parts):
+            result[parts[i][2:]] = parts[i + 1]
+            i += 2
+        else:
+            i += 1
+    return result
 
 
 def _login():
@@ -72,40 +80,53 @@ def _run(line: str) -> None:
 
         case "login":
             _CURRENT_USER = usecases.login(a["username"], a["password"])
-            _table(["Пользователь"], [[_CURRENT_USER.username]])
+            print(f"Вы вошли как '{_CURRENT_USER.username}'")
 
         case "show-portfolio":
             base = a.get("base", "USD").upper()
-            info = usecases.show_portfolio(_login(), base)
-            rows = [
-                [c, w.balance, f"{w.balance * usecases.get_rate(c, base)['rate']:.2f}"]
-                for c, w in info["portfolio"].wallets.items()
-            ]
-            rows.append(["ИТОГО", "", f"{info['total']:.2f}"])
-            _table(["Валюта", "Баланс", f"В {base}"], rows)
+            info = usecases.show_portfolio(_login().user_id, base)
+            print(f"Портфель пользователя '{info['user'].username}' (база: {base}):")
+            if not info["portfolio"].wallets:
+                print("Портфель пуст.")
+                return
+            for code, w in info["portfolio"].wallets.items():
+                value = info["wallet_values"][code]
+                print(f"- {w.get_balance_info()}  → {value:.2f} {base}")
+            print("-" * 33)
+            print(f"ИТОГО: {info['total']:,.2f} {base}")
 
         case "buy":
-            r = usecases.buy(_login(), a["currency"], float(a["amount"]))
-            _table(["Валюта", "Кол-во", "Курс", "Стоимость"],
-                   [[r["currency"], r["amount"], r["rate"], f"{r['cost']:.2f}"]])
+            r = usecases.buy(_login().user_id, a["currency"], a["amount"])
+            print(
+                f"Покупка выполнена: {r['amount']:.4f} {r['currency']} "
+                f"по курсу {r['rate']:,.2f} USD/{r['currency']}"
+            )
+            print("Изменения в портфеле:")
+            print(f"- {r['currency']}: было {r['before']:.4f} → стало {r['after']:.4f}")
+            print(f"Оценочная стоимость покупки: {r['cost']:,.2f} USD")
 
         case "sell":
-            r = usecases.sell(_login(), a["currency"], float(a["amount"]))
-            _table(["Валюта", "Кол-во", "Курс", "Выручка"],
-                   [[r["currency"], r["amount"], r["rate"], f"{r['revenue']:.2f}"]])
+            r = usecases.sell(_login().user_id, a["currency"], a["amount"])
+            print(
+                f"Продажа выполнена: {r['amount']:.4f} {r['currency']} "
+                f"по курсу {r['rate']:,.2f} USD/{r['currency']}"
+            )
+            print("Изменения в портфеле:")
+            print(f"- {r['currency']}: было {r['before']:.4f} → стало {r['after']:.4f}")
+            print(f"Оценочная выручка: {r['revenue']:,.2f} USD")
 
         case "get-rate":
             r = usecases.get_rate(a["from"], a["to"])
-            _table(["Из", "В", "Курс"],
-                   [[r["from"], r["to"], r["rate"]],
-                    [r["to"], r["from"], r["reverse"]]])
+            updated = (r["updated_at"] or "неизвестно").replace("T", " ").split(".")[0]
+            print(f"Курс {r['from']}→{r['to']}: {r['rate']:.8f} (обновлено: {updated})")
+            print(f"Обратный курс {r['to']}→{r['from']}: {r['reverse']:.8f}")
 
         case "update-rates":
             source = a.get("source")
             result = RatesUpdater().run_update(source=source)
             _table(
-                ["Источник", "Пар обновлено"],
-                [[source or "all", len(result)]],
+                ["Источник", "Пар обновлено", "Ошибок"],
+                [[source or "all", result["updated"], len(result["errors"])]],
             )
 
         case "show-rates":
@@ -114,20 +135,30 @@ def _run(line: str) -> None:
             data = usecases.show_rates(currency=currency, top=top)
             pairs = data["pairs"]
             if not pairs:
-                _table(["Сообщение"], [[f"Курс для '{currency}' не найден в кеше."]])
+                if currency:
+                    print(f"Курс для '{currency.upper()}' не найден в кеше.")
+                else:
+                    print(
+                        "Локальный кеш курсов пуст. "
+                        "Выполните 'update-rates', чтобы загрузить данные."
+                    )
             else:
                 rows = [[pair, f"{rate:.8f}"] for pair, rate in pairs.items()]
                 _table(["Пара", "Курс"], rows)
-                
+
         case _:
-            _table(["Сообщение"], [[f"Неизвестная команда: {cmd}"]])
+            print(f"Неизвестная команда: {cmd}")
 
 
 def main() -> None:
     """Интерактивный CLI."""
     print("Введите команду (или 'exit'):")
     while True:
-        line = input("> ").strip()
+        try:
+            line = input("> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            break
         if line == "exit":
             break
         _run(line)

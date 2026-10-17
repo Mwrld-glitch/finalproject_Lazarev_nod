@@ -67,6 +67,7 @@ CURRENCIES: dict[str, Currency] = {
     "RUB": FiatCurrency("RUB", "Russian Ruble", "Russia"),
     "BTC": CryptoCurrency("BTC", "Bitcoin", "SHA-256", 1.12e12),
     "ETH": CryptoCurrency("ETH", "Ethereum", "Ethash", 4.0e11),
+    "SOL": CryptoCurrency("SOL", "Solana", "PoH", 6.0e10),
 }
 
 

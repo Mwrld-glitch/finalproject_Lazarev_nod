@@ -28,3 +28,4 @@ check_parser.py
 
 # Данные
 data/*.json
+.env
