@@ -9,6 +9,7 @@ from valutatrade_hub.core.exceptions import (
     InsufficientFundsError,
 )
 
+
 class User:
     """Класс пользователя системы."""
 
@@ -57,7 +58,7 @@ class User:
         return hashlib.sha256((password + salt).encode("utf-8")).hexdigest()
 
     def get_user_info(self) -> str:
-        """Выводит информацию о пользователе (без пароля)."""
+        """Информация о пользователе (без пароля)."""
         return (
             f"ID: {self._user_id} | "
             f"Имя: {self._username} | "
@@ -66,13 +67,13 @@ class User:
         )
 
     def change_password(self, new_password: str):
-        """Изменяет пароль пользователя с хешированием."""
+        """Меняет пароль с хешированием."""
         if len(new_password) < 4:
             raise ValueError("Пароль должен быть не короче 4 символов.")
         self._hashed_password = self._hash_password(new_password, self._salt)
 
     def verify_password(self, password: str) -> bool:
-        """Проверяет введённый пароль на совпадение."""
+        """Проверяет пароль."""
         return self._hash_password(password, self._salt) == self._hashed_password
 
     def to_dict(self) -> dict:
@@ -96,8 +97,9 @@ class User:
             datetime.fromisoformat(data["registration_date"]),
         )
 
+
 class Wallet:
-    """Класс кошелька пользователя для одной конкретной валюты."""
+    """Кошелёк пользователя для одной валюты."""
 
     def __init__(self, currency_code: str, balance: float = 0.0):
         self.currency_code = currency_code
@@ -144,32 +146,27 @@ class Wallet:
             raise ValueError("Сумма снятия должна быть положительным числом.")
         if amount > self.balance:
             raise InsufficientFundsError(
-                f"Недостаточно средств: доступно {self.balance} "
-                f"{self.currency_code}, требуется {amount} {self.currency_code}"
+                f"Недостаточно средств: доступно {self.balance:.4f} "
+                f"{self.currency_code}, требуется {amount:.4f} {self.currency_code}"
             )
         self.balance -= amount
 
     def get_balance_info(self) -> str:
-        """Вывод информации о текущем балансе."""
-        return f"Кошелёк {self.currency_code}: {self.balance:.2f}"
+        """Информация о балансе."""
+        return f"{self.currency_code}: {self.balance:.4f}"
 
     def to_dict(self) -> dict:
-        """Сериализация кошелька в словарь."""
-        return {
-            "currency_code": self.currency_code,
-            "balance": self._balance,
-        }
+        """Сериализация: храним только баланс (код — ключ словаря)."""
+        return {"balance": self._balance}
 
     @classmethod
-    def from_dict(cls, data: dict) -> "Wallet":
-        """Десериализация из словаря в объект."""
-        return cls(
-            currency_code=data["currency_code"],
-            balance=data["balance"],
-        )
+    def from_dict(cls, currency_code: str, data: dict) -> "Wallet":
+        """Десериализация с явной передачей кода валюты."""
+        return cls(currency_code=currency_code, balance=data["balance"])
+
 
 class Portfolio:
-    """Класс управления всеми кошельками одного пользователя."""
+    """Управление всеми кошельками одного пользователя."""
 
     def __init__(
         self,
@@ -187,30 +184,35 @@ class Portfolio:
 
     @property
     def user(self) -> Optional[User]:
-        """Геттер, возвращающий объект пользователя."""
+        """Геттер без сеттера: объект User или None."""
         return self._user
 
     @property
     def wallets(self) -> Dict[str, Wallet]:
-        """Геттер, возвращающий копию словаря кошельков."""
+        """Копия словаря кошельков."""
         return self._wallets.copy()
 
-    def add_currency(self, currency_code: str):
-        """Добавляет кошелёк, если его ещё нет, и возвращает его."""
-        if currency_code not in self._wallets:
-            self._wallets[currency_code] = Wallet(currency_code)
-        return self._wallets[currency_code]
+    def add_currency(self, currency_code: str) -> Wallet:
+        """Добавляет кошелёк, если его нет, иначе возвращает существующий."""
+        code = currency_code.strip().upper()
+        if code not in self._wallets:
+            self._wallets[code] = Wallet(code)
+        return self._wallets[code]
 
     def get_wallet(self, currency_code: str) -> Optional[Wallet]:
-        """Возвращает объект Wallet по коду валюты."""
-        return self._wallets.get(currency_code)
+        """Возвращает Wallet по коду или None."""
+        return self._wallets.get(currency_code.strip().upper())
 
     def get_total_value(
         self,
         base_currency: str = "USD",
         rates: Optional[Dict[str, float]] = None,
     ) -> float:
-        """Возвращает общую стоимость всех валют в базовой валюте. """
+        """Стоимость всех валют в базовой валюте.
+
+        Если не передан, берётся
+        фиксированный словарь-заглушка из utils.
+        """
         if rates is None:
             from valutatrade_hub.core.utils import EXCHANGE_RATES
             rates = EXCHANGE_RATES
@@ -219,8 +221,8 @@ class Portfolio:
             raise CurrencyNotFoundError(
                 f"Неизвестная валюта '{base_currency}'"
             )
-
         base_rate = rates[base_currency]
+
         total = 0.0
         for code, wallet in self._wallets.items():
             if code not in rates:
@@ -229,25 +231,20 @@ class Portfolio:
         return total
 
     def to_dict(self) -> dict:
-        """Сериализация портфеля в словарь."""
+        """Сериализация в формат ТЗ."""
         return {
             "user_id": self._user_id,
             "wallets": {
                 code: wallet.to_dict()
                 for code, wallet in self._wallets.items()
-            }
+            },
         }
 
     @classmethod
     def from_dict(cls, data: dict) -> "Portfolio":
-        """Десериализация из словаря в объект."""
+        """Десериализация из формата ТЗ."""
         wallets = {
-            code: Wallet.from_dict(wallet_data)
+            code: Wallet.from_dict(code, wallet_data)
             for code, wallet_data in data["wallets"].items()
         }
-        return cls(
-            user_id=data["user_id"],
-            wallets=wallets
-        )
-
-
+        return cls(user_id=data["user_id"], wallets=wallets)
