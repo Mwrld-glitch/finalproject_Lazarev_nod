@@ -11,6 +11,7 @@ from valutatrade_hub.core.exceptions import (
     CurrencyNotFoundError,
     InsufficientFundsError,
 )
+from valutatrade_hub.logging_config import parser_console_logging
 from valutatrade_hub.parser_service.updater import RatesUpdater
 
 _CURRENT_USER = None
@@ -123,12 +124,22 @@ def _run(line: str) -> None:
 
         case "update-rates":
             source = a.get("source")
-            result = RatesUpdater().run_update(source=source)
-            _table(
-                ["Источник", "Пар обновлено", "Ошибок"],
-                [[source or "all", result["updated"], len(result["errors"])]],
+            with parser_console_logging():
+                try:
+                    result = RatesUpdater().run_update(source=source)
+                except ApiRequestError as e:
+                    print(f"ERROR: {e}")
+                    return
+            print(
+                f"Update successful. Total rates updated: {result['updated']}. "
+                f"Last refresh: {result['last_refresh']}"
             )
-
+            if result["errors"]:
+                print(
+                    "Update completed with errors. "
+                    "Check logs/parser.log for details."
+                )
+                
         case "show-rates":
             currency = a.get("currency")
             top = int(a["top"]) if "top" in a else None

@@ -8,6 +8,7 @@ from valutatrade_hub.core.exceptions import (
     CurrencyNotFoundError,
     InsufficientFundsError,
 )
+from valutatrade_hub.infra.settings import SettingsLoader
 
 
 class User:
@@ -68,7 +69,7 @@ class User:
 
     def change_password(self, new_password: str):
         """Меняет пароль с хешированием."""
-        if len(new_password) < 4:
+        if len(new_password) < SettingsLoader().get("MIN_PASSWORD_LENGTH"):
             raise ValueError("Пароль должен быть не короче 4 символов.")
         self._hashed_password = self._hash_password(new_password, self._salt)
 
@@ -116,7 +117,11 @@ class Wallet:
         code = value.strip().upper()
         if not code:
             raise ValueError("Код валюты не может быть пустым.")
-        if not (2 <= len(code) <= 5):
+        if not (
+            SettingsLoader().get("MIN_CODE_LENGTH")
+            <= len(code)
+            <= SettingsLoader().get("MAX_CODE_LENGTH")
+        ):
             raise ValueError("Код валюты должен быть 2–5 символов.")
         if " " in code:
             raise ValueError("Код валюты не должен содержать пробелов.")
@@ -210,8 +215,7 @@ class Portfolio:
     ) -> float:
         """Стоимость всех валют в базовой валюте.
 
-        Если не передан, берётся
-        фиксированный словарь-заглушка из utils.
+        Если rates не передан, берётся фиксированный словарь-заглушка.
         """
         if rates is None:
             from valutatrade_hub.core.utils import EXCHANGE_RATES

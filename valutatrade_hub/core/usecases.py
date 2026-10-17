@@ -77,11 +77,6 @@ def _validate_amount(amount) -> float:
 @log_action
 def register(username: str, password: str) -> str:
     """Регистрирует нового пользователя."""
-    if not username or not username.strip():
-        raise ValueError("Имя пользователя не может быть пустым.")
-    if len(password) < 4:
-        raise ValueError("Пароль должен быть не короче 4 символов.")
-
     db = DatabaseManager()
     users = db.load_users()
     if any(u.username == username for u in users):

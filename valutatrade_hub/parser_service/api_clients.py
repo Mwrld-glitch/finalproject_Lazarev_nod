@@ -13,7 +13,7 @@ class BaseApiClient(ABC):
 
     @abstractmethod
     def fetch_rates(self) -> dict:
-        """Возвращает {ПАРА: курс}."""
+        """Возвращает {"rates": {ПАРА: курс}, "updated_at": iso|None}."""
 
 
 class CoinGeckoClient(BaseApiClient):
@@ -31,6 +31,8 @@ class CoinGeckoClient(BaseApiClient):
                 params=params,
                 timeout=self.config.REQUEST_TIMEOUT,
             )
+            if resp.status_code == self.config.HTTP_TOO_MANY_REQUESTS:
+                raise ApiRequestError("CoinGecko: превышен лимит запросов (429)")
             resp.raise_for_status()
         except requests.exceptions.RequestException as e:
             raise ApiRequestError(f"CoinGecko: {e}") from e
@@ -42,7 +44,7 @@ class CoinGeckoClient(BaseApiClient):
             if rate is None:
                 raise ApiRequestError(f"CoinGecko: нет курса для {code}")
             result[f"{code}_{self.config.BASE_CURRENCY}"] = float(rate)
-        return result
+        return {"rates": result, "updated_at": None}
 
 
 class ExchangeRateApiClient(BaseApiClient):
@@ -62,6 +64,15 @@ class ExchangeRateApiClient(BaseApiClient):
         )
         try:
             resp = requests.get(url, timeout=self.config.REQUEST_TIMEOUT)
+            bad_key_codes = (
+                self.config.HTTP_UNAUTHORIZED,
+                self.config.HTTP_FORBIDDEN,
+                self.config.HTTP_NOT_FOUND,
+            )
+            if resp.status_code in bad_key_codes:
+                raise ApiRequestError("ExchangeRate-API: неверный API-ключ")
+            if resp.status_code == self.config.HTTP_TOO_MANY_REQUESTS:
+                raise ApiRequestError("ExchangeRate-API: превышен лимит (429)")
             resp.raise_for_status()
         except requests.exceptions.RequestException as e:
             raise ApiRequestError(f"ExchangeRate-API: {e}") from e
@@ -69,7 +80,7 @@ class ExchangeRateApiClient(BaseApiClient):
         data = resp.json()
         if data.get("result") != "success":
             raise ApiRequestError(
-                f"ExchangeRate-API: {data.get('error-type', 'неизвестная ошибка')}"
+                f"ExchangeRate-API: {data.get('error-type', 'ошибка')}"
             )
 
         rates = data.get("conversion_rates", {})
@@ -77,7 +88,10 @@ class ExchangeRateApiClient(BaseApiClient):
         for code in self.config.FIAT_CURRENCIES:
             rate = rates.get(code)
             if rate is None:
-                raise ApiRequestError(f"ExchangeRate-API: нет курса для {code}")
-            # API отдаёт «сколько X за 1 USD», переворачиваем в «USD за 1 X»
+                raise ApiRequestError(f"ExchangeRate-API: нет курса {code}")
             result[f"{code}_{self.config.BASE_CURRENCY}"] = 1.0 / float(rate)
-        return result
+
+        return {
+            "rates": result,
+            "updated_at": data.get("time_last_update_utc"),
+        }

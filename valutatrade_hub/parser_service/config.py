@@ -27,3 +27,7 @@ class ParserConfig:
     HISTORY_FILE_PATH: str = "data/exchange_rates.json"
 
     REQUEST_TIMEOUT: int = 10
+    HTTP_TOO_MANY_REQUESTS: int = 429
+    HTTP_UNAUTHORIZED: int = 401
+    HTTP_FORBIDDEN: int = 403
+    HTTP_NOT_FOUND: int = 404

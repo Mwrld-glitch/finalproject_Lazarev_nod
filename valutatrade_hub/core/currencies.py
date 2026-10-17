@@ -3,6 +3,7 @@
 from abc import ABC, abstractmethod
 
 from valutatrade_hub.core.exceptions import CurrencyNotFoundError
+from valutatrade_hub.infra.settings import SettingsLoader
 
 
 class Currency(ABC):
@@ -12,7 +13,11 @@ class Currency(ABC):
         if not code or not code.strip():
             raise ValueError("Код валюты не может быть пустым")
         code = code.strip().upper()
-        if not (2 <= len(code) <= 5):
+        if not (
+            SettingsLoader().get("MIN_CODE_LENGTH")
+            <= len(code)
+            <= SettingsLoader().get("MAX_CODE_LENGTH")
+        ):
             raise ValueError("Код валюты должен быть 2–5 символов")
         if " " in code:
             raise ValueError("Код валюты не должен содержать пробелов")

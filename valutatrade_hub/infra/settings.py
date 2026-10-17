@@ -27,6 +27,9 @@ class SettingsLoader:
             "DEFAULT_BASE": "USD",
             "LOG_FILE": Path("logs/actions.log"),
             "LOG_FORMAT": "%(asctime)s %(levelname)s %(message)s",
+            "MIN_PASSWORD_LENGTH": 4,
+            "MIN_CODE_LENGTH": 2,
+            "MAX_CODE_LENGTH": 5,
         }
 
     def get(self, key: str, default: Any = None) -> Any:
