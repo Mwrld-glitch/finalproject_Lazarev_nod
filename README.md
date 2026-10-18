@@ -165,4 +165,4 @@ EXCHANGERATE_API_KEY.
 
 ## Демо
 
-Запись работы CLI: https://asciinema.org/a/UYKy853VWN0GPvUJ
+Запись работы программы и ошибок:  https://asciinema.org/a/NAoqX0wrzi1QZBDm
