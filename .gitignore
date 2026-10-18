@@ -32,6 +32,10 @@ logs/
 
 # Данные
 data/*.json
+!data/users.json
+!data/portfolios.json
+!data/rates.json
+!data/exchange_rates.json
 
 # Демо
 demo.cast

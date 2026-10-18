@@ -6,11 +6,11 @@
 
 ## Структура проекта
 
-finalproject_<фамилия>_<группа>/
+finalproject_Lazarev_nod/
   data/
     users.json              # пользователи
     portfolios.json         # портфели и кошельки
-    rates.json              # кэш актуальных курсов (снимок)
+    rates.json              # кэш актуальных курсов
     exchange_rates.json     # история всех измерений
   valutatrade_hub/
     __init__.py
@@ -43,12 +43,19 @@ finalproject_<фамилия>_<группа>/
   README.md
   .gitignore
 
-## Установка
+## Установка и запуск
+
+Вариант 1 — как инструмент uv (рекомендуется):
+
+  uv tool install .
+  valutatrade
+  
+Проект устанавливается как инструмент uv — после этого команда
+valutatrade доступна из любой папки без префикса uv run.
+
+Вариант 2 — для разработки, из папки проекта:
 
   uv sync
-
-## Запуск
-
   uv run valutatrade
 
 Появится приглашение ">". Введите команду или exit для выхода.
