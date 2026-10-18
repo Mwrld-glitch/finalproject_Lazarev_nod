@@ -6,6 +6,7 @@
 
 ## Структура проекта
 
+```
 finalproject_Lazarev_nod/
   data/
     users.json              # пользователи
@@ -42,7 +43,7 @@ finalproject_Lazarev_nod/
   uv.lock
   README.md
   .gitignore
-
+```
 ## Установка и запуск
 
 Вариант 1 — как инструмент uv (рекомендуется):
