@@ -1,6 +1,7 @@
 """Клиенты внешних API для получения курсов."""
 
 from abc import ABC, abstractmethod
+from datetime import datetime
 
 import requests
 
@@ -91,7 +92,14 @@ class ExchangeRateApiClient(BaseApiClient):
                 raise ApiRequestError(f"ExchangeRate-API: нет курса {code}")
             result[f"{code}_{self.config.BASE_CURRENCY}"] = 1.0 / float(rate)
 
-        return {
-            "rates": result,
-            "updated_at": data.get("time_last_update_utc"),
-        }
+        raw_time = data.get("time_last_update_utc")
+        iso_time = None
+        if raw_time:
+            try:
+                iso_time = datetime.strptime(
+                    raw_time, "%a, %d %b %Y %H:%M:%S %z"
+                ).isoformat()
+            except ValueError:
+                pass
+
+        return {"rates": result, "updated_at": iso_time}

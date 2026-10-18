@@ -119,7 +119,7 @@ def _run(line: str) -> None:
 
         case "get-rate":
             r = usecases.get_rate(a["from"], a["to"])
-            updated = (r["updated_at"] or "неизвестно").replace("T", " ").split(".")[0]
+            updated = (r["updated_at"] or "неизвестно").replace("T", " ").split(".")[0].split("+")[0]
             print(f"Курс {r['from']}→{r['to']}: {r['rate']:.8f} (обновлено: {updated})")
             print(f"Обратный курс {r['to']}→{r['from']}: {r['reverse']:.8f}")
 
