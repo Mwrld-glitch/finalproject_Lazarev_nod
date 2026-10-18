@@ -266,7 +266,12 @@ def show_rates(currency: str | None = None, top: int | None = None) -> dict:
         return {"pairs": pairs, "updated_at": updated_at}
 
     if top:
-        sorted_pairs = sorted(pairs.items(), key=lambda x: x[1], reverse=True)
+        fiat = {"EUR", "GBP", "RUB"}
+        crypto = {
+            k: v for k, v in pairs.items()
+            if k.split("_")[0] not in fiat
+        }
+        sorted_pairs = sorted(crypto.items(), key=lambda x: x[1], reverse=True)
         pairs = dict(sorted_pairs[:top])
 
     return {"pairs": pairs, "updated_at": updated_at}

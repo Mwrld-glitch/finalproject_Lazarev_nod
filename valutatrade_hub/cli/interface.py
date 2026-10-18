@@ -90,11 +90,12 @@ def _run(line: str) -> None:
             if not info["portfolio"].wallets:
                 print("Портфель пуст.")
                 return
-            for code, w in info["portfolio"].wallets.items():
-                value = info["wallet_values"][code]
-                print(f"- {w.get_balance_info()}  → {value:.2f} {base}")
-            print("-" * 33)
-            print(f"ИТОГО: {info['total']:,.2f} {base}")
+            rows = [
+                [w.get_balance_info(), f"{info['wallet_values'][code]:.2f} {base}"]
+                for code, w in info["portfolio"].wallets.items()
+            ]
+            rows.append(["ИТОГО", f"{info['total']:,.2f} {base}"])
+            _table(["Валюта", f"В {base}"], rows)
 
         case "buy":
             r = usecases.buy(_login().user_id, a["currency"], a["amount"])
