@@ -163,7 +163,7 @@ def _run(line: str) -> None:
             print(f"Неизвестная команда: {cmd}")
 
 
-def main() -> None:
+def run() -> None:
     """Интерактивный CLI."""
     print("Введите команду (или 'exit'):")
     while True:

@@ -5,6 +5,8 @@ from abc import ABC, abstractmethod
 from valutatrade_hub.core.exceptions import CurrencyNotFoundError
 from valutatrade_hub.infra.settings import SettingsLoader
 
+_settings = SettingsLoader()
+
 
 class Currency(ABC):
     """Абстрактный базовый класс валюты."""
@@ -14,9 +16,9 @@ class Currency(ABC):
             raise ValueError("Код валюты не может быть пустым")
         code = code.strip().upper()
         if not (
-            SettingsLoader().get("MIN_CODE_LENGTH")
+            _settings.get("MIN_CODE_LENGTH")
             <= len(code)
-            <= SettingsLoader().get("MAX_CODE_LENGTH")
+            <= _settings.get("MAX_CODE_LENGTH")
         ):
             raise ValueError("Код валюты должен быть 2–5 символов")
         if " " in code:
