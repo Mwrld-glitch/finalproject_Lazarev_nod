@@ -32,3 +32,6 @@ logs/
 
 # Данные
 data/*.json
+
+# Демо
+demo.cast
