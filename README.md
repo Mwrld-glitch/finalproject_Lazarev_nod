@@ -60,6 +60,10 @@ finalproject_<фамилия>_<группа>/
   register --username alice --password 1234
   login --username alice --password 1234
 
+
+Повторный login заменяет текущую сессию: работа продолжается
+от имени последнего успешно вошедшего пользователя.
+
 Портфель:
 
   show-portfolio

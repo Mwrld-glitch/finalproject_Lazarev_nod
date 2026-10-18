@@ -7,6 +7,12 @@ venv/
 
 # uv
 .uv/
+.python-version
+
+# Build
+dist/
+build/
+*.egg
 
 # Ruff
 .ruff_cache/
@@ -18,14 +24,11 @@ venv/
 # OS
 .DS_Store
 
-# Логи и окружение
+# Логи
 logs/
-.env
 
-# Тесты
-check.py
-check_parser.py
+# Секреты
+.env
 
 # Данные
 data/*.json
-.env

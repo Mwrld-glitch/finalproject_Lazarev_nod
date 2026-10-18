@@ -6,7 +6,6 @@ from logging.handlers import RotatingFileHandler
 
 from valutatrade_hub.infra.settings import SettingsLoader
 
-
 _FILE_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
 _CONSOLE_FORMAT = "%(levelname)s %(message)s"
 
